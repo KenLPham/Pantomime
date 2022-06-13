@@ -10,6 +10,8 @@ import Foundation
 
 open class MasterPlaylist {
     var playlists = [MediaPlaylist]()
+//    var subtitles = [MediaSubtitle]()
+    
     open var path: String?
 
     public init() {}
@@ -28,4 +30,23 @@ open class MasterPlaylist {
     open func getPlaylistCount() -> Int {
         return playlists.count
     }
+    
+    open func getPlaylists(type: MediaType) -> [MediaPlaylist] {
+        return playlists.filter { $0.type == type }
+    }
+    
+//    open func getSubtitleCount() -> Int {
+//        return subtitles.count
+//    }
+//
+//    open func addSubtitle(_ subtitle: MediaSubtitle) {
+//        subtitles.append(subtitle)
+//    }
+//
+//    open func getSubtitle(_ index: Int) -> MediaSubtitle? {
+//        if index >= subtitles.count {
+//            return nil
+//        }
+//        return subtitles[index]
+//    }
 }

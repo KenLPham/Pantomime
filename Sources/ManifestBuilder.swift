@@ -18,12 +18,13 @@ open class ManifestBuilder {
     */
     fileprivate func parseMasterPlaylist(_ reader: BufferedReader, onMediaPlaylist:
             ((_ playlist: MediaPlaylist) -> Void)?) -> MasterPlaylist {
-        var masterPlaylist = MasterPlaylist()
+        let masterPlaylist = MasterPlaylist()
         var currentMediaPlaylist: MediaPlaylist?
-
+        
         defer {
             reader.close()
         }
+        
         while let line = reader.readLine() {
             if line.isEmpty {
                 // Skip empty lines
@@ -36,18 +37,39 @@ open class ManifestBuilder {
 
                 } else if line.hasPrefix("#EXT-X-STREAM-INF") {
                     // #EXT-X-STREAM-INF:PROGRAM-ID=1, BANDWIDTH=200000
-                    currentMediaPlaylist = MediaPlaylist()
-                    do {
-                        let programIdString = try line.replace("(.*)=(\\d+),(.*)", replacement: "$2")
-                        let bandwidthString = try line.replace("(.*),(.*)=(\\d+)(.*)", replacement: "$3")
-                        if let currentMediaPlaylistExist = currentMediaPlaylist {
-                            currentMediaPlaylistExist.programId = Int(programIdString)!
-                            currentMediaPlaylistExist.bandwidth = Int(bandwidthString)!
-                        }
-                    } catch {
-                        print("Failed to parse program-id and bandwidth on master playlist. Line = \(line)")
+                    if let type = parseLine(line, attribute: "TYPE"), let mediaType = MediaType(rawValue: type) {
+                        currentMediaPlaylist = MediaPlaylist(type: mediaType)
                     }
-
+                    if let mediaPlaylist = currentMediaPlaylist {
+                        do {
+                            if let brandwidth = parseLine(line, attribute: "BANDWIDTH") {
+                                mediaPlaylist.bandwidth = Int(brandwidth)!
+                            }
+                            
+                            let programIdString = try line.replace("(.*)=(\\d+),(.*)", replacement: "$2")
+                            mediaPlaylist.programId = Int(programIdString)!
+                            
+                        } catch {
+                            print("Failed to parse program-id and bandwidth on master playlist. Line = \(line)")
+                        }
+                    }
+                } else if line.hasPrefix("#EXT-X-MEDIA:TYPE=SUBTITLES") {
+                    // #EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="eng",NAME="English",AUTOSELECT=YES,DEFAULT=YES,URI="subtitles/eng/prog_index.m3u8",FORCED=NO
+                    if let type = parseLine(line, attribute: "TYPE"), let mediaType = MediaType(rawValue: type) {
+                        currentMediaPlaylist = MediaPlaylist(type: mediaType)
+                    }
+                    
+                    if let mediaPlaylist = currentMediaPlaylist {
+                        mediaPlaylist.path = parseLine(line, attribute: "URI")?.replacingOccurrences(of: "\"", with: "")
+                        mediaPlaylist.language = parseLine(line, attribute: "LANGUAGE")
+                        mediaPlaylist.name = parseLine(line, attribute: "NAME")
+                        
+                        mediaPlaylist.masterPlaylist = masterPlaylist
+                        masterPlaylist.addPlaylist(mediaPlaylist)
+                        if let callableOnMediaPlaylist = onMediaPlaylist {
+                            callableOnMediaPlaylist(mediaPlaylist)
+                        }
+                    }
                 }
             } else if line.hasPrefix("#") {
                 // Comments are ignored
@@ -66,6 +88,16 @@ open class ManifestBuilder {
         }
 
         return masterPlaylist
+    }
+    
+    private func parseLine(_ line: String, attribute: String) -> String? {
+        let params = line.split(separator: ",")
+        
+        if let index = params.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).contains(attribute)}) {
+            return params[index].split(separator: "=").map(String.init).last
+        }
+        
+        return nil
     }
 
     /**
